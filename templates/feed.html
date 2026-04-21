@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Feed — The Eye{% endblock %}
+{% block content %}
+<div class="feed-controls">
+    <form method="get" action="/">
+        <select name="source" onchange="this.form.submit()">
+            <option value="">All sources</option>
+            {% for s in sources %}
+            <option value="{{ s.id }}"
+                {% if current_source == s.id %}selected{% endif %}>
+                {{ s.name }}
+            </option>
+            {% endfor %}
+        </select>
+        <select name="status" onchange="this.form.submit()">
+            <option value="all" {% if current_status == 'all' %}selected{% endif %}>All</option>
+            <option value="unread" {% if current_status == 'unread' %}selected{% endif %}>Unread</option>
+            <option value="read" {% if current_status == 'read' %}selected{% endif %}>Read</option>
+        </select>
+    </form>
+    <span class="count">{{ total }} articles</span>
+</div>
+
+{% if articles %}
+<div class="feed">
+    {% for a in articles %}
+    <article class="feed-item {% if a.read_at %}read{% else %}unread{% endif %}">
+        <div class="feed-item-header">
+            <span class="source">{{ a.source_name }}</span>
+            {% if a.author %}<span class="author">{{ a.author }}</span>{% endif %}
+            {% if a.note_id %}<span class="has-note" title="Has notes">*</span>{% endif %}
+        </div>
+        <h2>
+            <a href="/article/{{ a.id }}">
+                {{ a.summary_title or a.title or 'Untitled' }}
+            </a>
+        </h2>
+        {% if a.summary_text %}
+        <p class="summary">{{ a.summary_text }}</p>
+        {% endif %}
+        <div class="feed-item-footer">
+            <a href="{{ a.url }}" class="original-link" target="_blank" rel="noopener">original</a>
+            <time>{{ a.published_at or a.discovered_at }}</time>
+            {% if a.read_at %}
+            <form method="post" action="/article/{{ a.id }}/unread" class="inline">
+                <button type="submit" class="btn-sm">mark unread</button>
+            </form>
+            {% else %}
+            <form method="post" action="/article/{{ a.id }}/read" class="inline">
+                <button type="submit" class="btn-sm">mark read</button>
+            </form>
+            {% endif %}
+        </div>
+    </article>
+    {% endfor %}
+</div>
+
+{% if total_pages > 1 %}
+<nav class="pagination">
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}{% if current_source %}&source={{ current_source }}{% endif %}&status={{ current_status }}">prev</a>
+    {% endif %}
+    <span>{{ page }} / {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="?page={{ page + 1 }}{% if current_source %}&source={{ current_source }}{% endif %}&status={{ current_status }}">next</a>
+    {% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<p class="empty">No articles yet. Run <code>theeye crawl</code> to fetch some.</p>
+{% endif %}
+{% endblock %}

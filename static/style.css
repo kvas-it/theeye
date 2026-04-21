@@ -1,0 +1,183 @@
+:root {
+    --bg: #fafafa;
+    --fg: #222;
+    --muted: #666;
+    --border: #ddd;
+    --accent: #2563eb;
+    --accent-light: #eff6ff;
+    --unread-bg: #fff;
+    --read-bg: #f5f5f5;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.5;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
+header nav {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1rem;
+}
+
+.logo {
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: var(--fg);
+    text-decoration: none;
+}
+
+/* Feed controls */
+.feed-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+.feed-controls form { display: flex; gap: 0.5rem; }
+.feed-controls select {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fff;
+}
+.count { color: var(--muted); font-size: 0.9rem; margin-left: auto; }
+
+/* Feed items */
+.feed-item {
+    padding: 0.8rem 0;
+    border-bottom: 1px solid var(--border);
+}
+.feed-item.unread { border-left: 3px solid var(--accent); padding-left: 0.8rem; }
+.feed-item.read { opacity: 0.7; }
+
+.feed-item-header {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 0.2rem;
+}
+
+.feed-item h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+}
+.feed-item h2 a {
+    color: var(--fg);
+    text-decoration: none;
+}
+.feed-item h2 a:hover { color: var(--accent); }
+
+.summary {
+    font-size: 0.9rem;
+    color: var(--muted);
+    margin-bottom: 0.3rem;
+}
+
+.feed-item-footer {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+.feed-item-footer a { color: var(--accent); text-decoration: none; }
+
+.has-note {
+    color: var(--accent);
+    font-weight: bold;
+}
+
+.inline { display: inline; }
+.btn-sm {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0;
+}
+.btn-sm:hover { text-decoration: underline; }
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 0;
+}
+.pagination a { color: var(--accent); text-decoration: none; }
+
+/* Article detail */
+.article-detail header { margin-bottom: 1.5rem; }
+.article-detail h1 { font-size: 1.5rem; margin: 0.5rem 0; }
+.meta {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--muted);
+}
+.original-title { font-size: 0.9rem; color: var(--muted); font-style: italic; }
+.original-link { color: var(--accent); text-decoration: none; font-size: 0.9rem; }
+
+.summary-box {
+    background: var(--accent-light);
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+}
+.summary-box h3 { font-size: 0.9rem; margin-bottom: 0.5rem; }
+
+.content { margin-bottom: 1.5rem; }
+.content h3 { font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--muted); }
+.article-text { white-space: pre-wrap; font-size: 0.9rem; line-height: 1.6; }
+
+.notes { margin-bottom: 1.5rem; }
+.notes h3 { font-size: 0.9rem; margin-bottom: 0.5rem; }
+.notes textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    resize: vertical;
+}
+.notes button {
+    margin-top: 0.5rem;
+    padding: 0.4rem 1rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.notes button:hover { opacity: 0.9; }
+
+.article-detail footer {
+    padding: 1rem 0;
+    border-top: 1px solid var(--border);
+}
+.article-detail footer a { color: var(--accent); text-decoration: none; }
+
+.empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 3rem 0;
+}
+.empty code {
+    background: #eee;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+}

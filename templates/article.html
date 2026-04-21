@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ article.summary_title or article.title or 'Article' }} — The Eye{% endblock %}
+{% block content %}
+<article class="article-detail">
+    <header>
+        <div class="meta">
+            <span class="source">{{ article.source_name }}</span>
+            {% if article.author %}<span class="author">{{ article.author }}</span>{% endif %}
+            <time>{{ article.published_at or article.discovered_at }}</time>
+        </div>
+        <h1>{{ article.summary_title or article.title or 'Untitled' }}</h1>
+        {% if article.summary_title and article.title and article.summary_title != article.title %}
+        <p class="original-title">Original title: {{ article.title }}</p>
+        {% endif %}
+        <a href="{{ article.url }}" target="_blank" rel="noopener" class="original-link">Read original</a>
+    </header>
+
+    {% if article.summary_text %}
+    <section class="summary-box">
+        <h3>Summary</h3>
+        <p>{{ article.summary_text }}</p>
+    </section>
+    {% endif %}
+
+    {% if article.content_text %}
+    <section class="content">
+        <h3>Extracted text</h3>
+        <div class="article-text">{{ article.content_text[:5000] }}</div>
+    </section>
+    {% endif %}
+
+    <section class="notes">
+        <h3>Notes</h3>
+        <form method="post" action="/article/{{ article.id }}/note">
+            <textarea name="text" rows="4" placeholder="Add a note...">{{ article.note_text or '' }}</textarea>
+            <button type="submit">Save note</button>
+        </form>
+    </section>
+
+    <footer>
+        <a href="/">&larr; Back to feed</a>
+    </footer>
+</article>
+{% endblock %}
