@@ -61,19 +61,28 @@ def call_claude(prompt: str) -> dict | None:
         "--model", "haiku",
         "--system-prompt", SYSTEM_PROMPT,
         "--json-schema", JSON_SCHEMA,
-        "--bare",
     ]
     try:
         result = subprocess.run(
             cmd, input=prompt, capture_output=True, text=True, timeout=120,
         )
         if result.returncode != 0:
-            log.warning("Claude CLI error: %s", result.stderr[:500])
+            log.warning(
+                "Claude CLI error (rc=%d): %s",
+                result.returncode,
+                result.stderr[:500] or result.stdout[:500],
+            )
             return None
         data = json.loads(result.stdout)
-        # --output-format json wraps in {"result": "..."}
-        text = data.get("result", result.stdout)
-        # The result itself should be JSON from --json-schema
+        if data.get("is_error"):
+            log.warning("Claude CLI error: %s", data.get("result", "")[:500])
+            return None
+        # --json-schema puts structured output in "structured_output"
+        structured = data.get("structured_output")
+        if isinstance(structured, dict):
+            return structured
+        # Fallback: try parsing "result" as JSON
+        text = data.get("result", "")
         if isinstance(text, str):
             return json.loads(text)
         return text

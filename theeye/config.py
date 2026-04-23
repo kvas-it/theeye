@@ -12,6 +12,7 @@ class Source:
     type: str = "rss"  # rss, web, forum
     link_selector: str | None = None
     link_pattern: str | None = None
+    content_selector: str | None = None
 
 
 @dataclass
@@ -34,6 +35,7 @@ def load_sources(path: str | Path) -> list[Source]:
             type=s.get("type", "rss"),
             link_selector=s.get("link_selector"),
             link_pattern=s.get("link_pattern"),
+            content_selector=s.get("content_selector"),
         ))
     return sources
 

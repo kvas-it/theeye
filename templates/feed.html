@@ -43,10 +43,16 @@
             <time>{{ a.published_at or a.discovered_at }}</time>
             {% if a.read_at %}
             <form method="post" action="/article/{{ a.id }}/unread" class="inline">
+                <input type="hidden" name="page" value="{{ page }}">
+                <input type="hidden" name="status" value="{{ current_status }}">
+                {% if current_source %}<input type="hidden" name="source" value="{{ current_source }}">{% endif %}
                 <button type="submit" class="btn-sm">mark unread</button>
             </form>
             {% else %}
             <form method="post" action="/article/{{ a.id }}/read" class="inline">
+                <input type="hidden" name="page" value="{{ page }}">
+                <input type="hidden" name="status" value="{{ current_status }}">
+                {% if current_source %}<input type="hidden" name="source" value="{{ current_source }}">{% endif %}
                 <button type="submit" class="btn-sm">mark read</button>
             </form>
             {% endif %}

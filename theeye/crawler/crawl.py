@@ -33,14 +33,30 @@ def article_exists(db: sqlite3.Connection, url: str) -> bool:
     return row is not None
 
 
-def extract_text(html: str, url: str) -> tuple[str | None, str | None]:
-    """Extract title and main text from HTML using readability."""
+def extract_text(
+    html: str, url: str, content_selector: str | None = None,
+) -> tuple[str | None, str | None]:
+    """Extract title and main text from HTML.
+
+    If content_selector is given, extract text from matching elements
+    instead of using readability's heuristic.
+    """
+    from lxml.html import fromstring
+
+    if content_selector:
+        from lxml.cssselect import CSSSelector
+        tree = fromstring(html)
+        tree.make_links_absolute(url)
+        title_el = tree.find(".//title")
+        title = title_el.text_content().strip() if title_el is not None else None
+        sel = CSSSelector(content_selector)
+        parts = [el.text_content().strip() for el in sel(tree)]
+        text = "\n\n".join(parts) if parts else None
+        return title, text
+
     doc = Document(html, url=url)
     title = doc.short_title() or None
-    # Get text content, stripping HTML tags
     summary_html = doc.summary()
-    # Simple HTML-to-text: use lxml
-    from lxml.html import fromstring, tostring
     try:
         tree = fromstring(summary_html)
         text = tree.text_content().strip()

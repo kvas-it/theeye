@@ -46,8 +46,17 @@ sources:
   - name: "Example Site"
     url: "https://example.com/articles"
     type: web
-    link_pattern: "/articles/\\d{4}/"
+    link_selector: "div.post-title a"       # CSS selector for article links
+    link_pattern: "/articles/\\d{4}/"       # regex filter for URLs
+    content_selector: "article .content"    # CSS selector for content extraction
 ```
+
+Source types:
+- `rss` — RSS/Atom feed, parsed with feedparser
+- `web` — HTML page with links to articles. Use `link_selector` and
+  `link_pattern` to target the right links. Use `content_selector` to
+  extract content from specific elements (useful for forums, avoids
+  picking up page chrome).
 
 ## Development
 

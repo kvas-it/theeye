@@ -39,9 +39,12 @@ sources.yaml         # feed source configuration
 - **Migrations**: simple numbered SQL files in `migrations/`, tracked by
   `schema_version` table. App runs pending migrations on startup.
 - **Extraction**: `feedparser` for RSS/Atom, `readability-lxml` for article
-  text from any URL.
-- **Summarization**: Claude Code CLI in pipe mode, decoupled from crawling.
-  Runs as a separate batch command.
+  text from any URL. Sources can set `content_selector` to extract from
+  specific CSS-selected elements instead of readability heuristics.
+- **Summarization**: Claude Code CLI in pipe mode (`claude -p`), decoupled
+  from crawling. Uses `--output-format json` and `--json-schema`; the
+  structured result is in the `structured_output` field of the JSON
+  response. Do NOT use `--bare` flag (breaks Max subscription auth).
 - **Frontend**: server-rendered Jinja2 templates. Add htmx for interactivity
   as needed — no JS build step.
 - **Config**: sources in `sources.yaml`, app settings via environment

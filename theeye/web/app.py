@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from urllib.parse import urlencode
+
 from fastapi import FastAPI, Request, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -28,7 +30,7 @@ def get_conn():
 def feed(
     request: Request,
     page: int = Query(1, ge=1),
-    source: int | None = Query(None),
+    source: str | None = Query(None),
     status: str = Query("all"),  # all, unread, read
 ):
     db = get_conn()
@@ -37,9 +39,10 @@ def feed(
         conditions = []
         params = []
 
-        if source:
+        source_id = int(source) if source else None
+        if source_id:
             conditions.append("a.source_id = ?")
-            params.append(source)
+            params.append(source_id)
         if status == "unread":
             conditions.append("r.article_id IS NULL")
         elif status == "read":
@@ -90,7 +93,7 @@ def feed(
             "page": page,
             "total_pages": total_pages,
             "total": total,
-            "current_source": source,
+            "current_source": source_id,
             "current_status": status,
         })
     finally:
@@ -131,8 +134,25 @@ def article_detail(request: Request, article_id: int):
         db.close()
 
 
+def _feed_redirect(page: str, status: str, source: str) -> RedirectResponse:
+    params = {}
+    if page and page != "1":
+        params["page"] = page
+    if status and status != "all":
+        params["status"] = status
+    if source:
+        params["source"] = source
+    url = "/" + ("?" + urlencode(params) if params else "")
+    return RedirectResponse(url, status_code=303)
+
+
 @app.post("/article/{article_id}/read")
-def mark_read(article_id: int):
+def mark_read(
+    article_id: int,
+    page: str = Form("1"),
+    status: str = Form("all"),
+    source: str = Form(""),
+):
     db = get_conn()
     try:
         db.execute(
@@ -140,20 +160,25 @@ def mark_read(article_id: int):
             (article_id,),
         )
         db.commit()
-        return RedirectResponse("/", status_code=303)
+        return _feed_redirect(page, status, source)
     finally:
         db.close()
 
 
 @app.post("/article/{article_id}/unread")
-def mark_unread(article_id: int):
+def mark_unread(
+    article_id: int,
+    page: str = Form("1"),
+    status: str = Form("all"),
+    source: str = Form(""),
+):
     db = get_conn()
     try:
         db.execute(
             "DELETE FROM read_state WHERE article_id = ?", (article_id,),
         )
         db.commit()
-        return RedirectResponse("/", status_code=303)
+        return _feed_redirect(page, status, source)
     finally:
         db.close()
 

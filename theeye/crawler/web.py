@@ -94,7 +94,9 @@ def crawl_web(
         if not page_html:
             continue
 
-        title, content_text = extract_text(page_html, url)
+        title, content_text = extract_text(
+            page_html, url, content_selector=source.content_selector,
+        )
         # Skip very short pages — probably not articles
         if content_text and len(content_text) < 200:
             log.debug("  Skipping short page: %s", url)

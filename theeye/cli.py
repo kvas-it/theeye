@@ -1,4 +1,5 @@
 import argparse
+import logging
 import sys
 
 
@@ -70,7 +71,20 @@ def main():
     p_serve.add_argument("--port", type=int, default=8000)
     p_serve.add_argument("--reload", action="store_true")
 
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Enable debug logging",
+    )
+
     args = parser.parse_args()
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(levelname)s: %(message)s",
+    )
+    # Quiet noisy libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
     if not args.command:
         parser.print_help()
         sys.exit(1)

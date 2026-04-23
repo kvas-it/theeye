@@ -1,1 +1,11 @@
-sources: []
+sources:
+  - name: Overcoming Bias
+    url: https://www.overcomingbias.com/feed
+    type: rss
+
+  - name: SemiWiki Forum
+    url: https://semiwiki.com/forum/forums/semiwiki-main-forum-ask-the-experts.2/
+    type: web
+    link_selector: "div.structItem-title a"
+    link_pattern: "/forum/threads/[^/]+\\.\\d+/"
+    content_selector: "article.message-body .bbWrapper"
