@@ -16,6 +16,7 @@
             <option value="all" {% if current_status == 'all' %}selected{% endif %}>All</option>
             <option value="unread" {% if current_status == 'unread' %}selected{% endif %}>Unread</option>
             <option value="read" {% if current_status == 'read' %}selected{% endif %}>Read</option>
+            <option value="favorites" {% if current_status == 'favorites' %}selected{% endif %}>Favorites</option>
         </select>
     </form>
     <span class="count">{{ total }} articles</span>
@@ -39,6 +40,12 @@
         <p class="summary">{{ a.summary_text }}</p>
         {% endif %}
         <div class="feed-item-footer">
+            <form method="post" action="/article/{{ a.id }}/favorite" class="inline">
+                <input type="hidden" name="page" value="{{ page }}">
+                <input type="hidden" name="status" value="{{ current_status }}">
+                {% if current_source %}<input type="hidden" name="source" value="{{ current_source }}">{% endif %}
+                <button type="submit" class="btn-star{% if a.is_favorite %} active{% endif %}" title="{{ 'Unfavorite' if a.is_favorite else 'Favorite' }}">{{ '*' if a.is_favorite else '-' }}</button>
+            </form>
             <a href="{{ a.url }}" class="original-link" target="_blank" rel="noopener">original</a>
             <time>{{ a.published_at or a.discovered_at }}</time>
             {% if a.read_at %}

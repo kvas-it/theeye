@@ -108,6 +108,18 @@ header nav {
     padding: 0;
 }
 .btn-sm:hover { text-decoration: underline; }
+.btn-star {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--muted);
+    padding: 0;
+}
+.btn-star.active { color: var(--accent); font-weight: bold; }
+.btn-star:hover { color: var(--accent); }
+
+.article-actions { display: flex; gap: 1rem; align-items: center; }
 
 /* Pagination */
 .pagination {

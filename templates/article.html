@@ -12,7 +12,12 @@
         {% if article.summary_title and article.title and article.summary_title != article.title %}
         <p class="original-title">Original title: {{ article.title }}</p>
         {% endif %}
-        <a href="{{ article.url }}" target="_blank" rel="noopener" class="original-link">Read original</a>
+        <div class="article-actions">
+            <a href="{{ article.url }}" target="_blank" rel="noopener" class="original-link">Read original</a>
+            <form method="post" action="/article/{{ article.id }}/favorite" class="inline">
+                <button type="submit" class="btn-star{% if article.is_favorite %} active{% endif %}">{{ 'Unfavorite' if article.is_favorite else 'Favorite' }}</button>
+            </form>
+        </div>
     </header>
 
     {% if article.summary_text %}

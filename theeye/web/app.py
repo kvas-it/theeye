@@ -31,7 +31,7 @@ def feed(
     request: Request,
     page: int = Query(1, ge=1),
     source: str | None = Query(None),
-    status: str = Query("all"),  # all, unread, read
+    status: str = Query("all"),  # all, unread, read, favorites
 ):
     db = get_conn()
     try:
@@ -47,6 +47,8 @@ def feed(
             conditions.append("r.article_id IS NULL")
         elif status == "read":
             conditions.append("r.article_id IS NOT NULL")
+        elif status == "favorites":
+            conditions.append("f.article_id IS NOT NULL")
 
         where = ""
         if conditions:
@@ -56,6 +58,7 @@ def feed(
         count_q = f"""
             SELECT COUNT(*) as c FROM articles a
             LEFT JOIN read_state r ON a.id = r.article_id
+            LEFT JOIN favorites f ON a.id = f.article_id
             {where}
         """
         total = db.execute(count_q, params).fetchone()["c"]
@@ -68,14 +71,16 @@ def feed(
                    s.name as source_name, s.id as source_id,
                    sm.summary_title, sm.summary_text,
                    r.read_at,
-                   n.id as note_id
+                   n.id as note_id,
+                   f.article_id as is_favorite
             FROM articles a
             JOIN sources s ON a.source_id = s.id
             LEFT JOIN summaries sm ON a.id = sm.article_id
             LEFT JOIN read_state r ON a.id = r.article_id
             LEFT JOIN notes n ON a.id = n.article_id
+            LEFT JOIN favorites f ON a.id = f.article_id
             {where}
-            ORDER BY a.discovered_at DESC
+            ORDER BY COALESCE(a.published_at, a.discovered_at) DESC
             LIMIT ? OFFSET ?
         """
         articles = db.execute(
@@ -108,12 +113,14 @@ def article_detail(request: Request, article_id: int):
             SELECT a.*, s.name as source_name,
                    sm.summary_title, sm.summary_text,
                    r.read_at,
-                   n.text as note_text, n.id as note_id
+                   n.text as note_text, n.id as note_id,
+                   f.article_id as is_favorite
             FROM articles a
             JOIN sources s ON a.source_id = s.id
             LEFT JOIN summaries sm ON a.id = sm.article_id
             LEFT JOIN read_state r ON a.id = r.article_id
             LEFT JOIN notes n ON a.id = n.article_id
+            LEFT JOIN favorites f ON a.id = f.article_id
             WHERE a.id = ?
         """, (article_id,)).fetchone()
 
@@ -177,6 +184,33 @@ def mark_unread(
         db.execute(
             "DELETE FROM read_state WHERE article_id = ?", (article_id,),
         )
+        db.commit()
+        return _feed_redirect(page, status, source)
+    finally:
+        db.close()
+
+
+@app.post("/article/{article_id}/favorite")
+def toggle_favorite(
+    article_id: int,
+    page: str = Form("1"),
+    status: str = Form("all"),
+    source: str = Form(""),
+):
+    db = get_conn()
+    try:
+        exists = db.execute(
+            "SELECT 1 FROM favorites WHERE article_id = ?", (article_id,),
+        ).fetchone()
+        if exists:
+            db.execute(
+                "DELETE FROM favorites WHERE article_id = ?", (article_id,),
+            )
+        else:
+            db.execute(
+                "INSERT INTO favorites (article_id) VALUES (?)",
+                (article_id,),
+            )
         db.commit()
         return _feed_redirect(page, status, source)
     finally:

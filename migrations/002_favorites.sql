@@ -1,0 +1,4 @@
+CREATE TABLE favorites (
+    article_id INTEGER PRIMARY KEY REFERENCES articles(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

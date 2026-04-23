@@ -29,7 +29,9 @@ def test_migrations_idempotent(db, tmp_path):
     migrations_dir = Path(__file__).parent.parent / "migrations"
     run_migrations(db, migrations_dir)
     rows = db.execute("SELECT COUNT(*) AS c FROM schema_version").fetchone()
-    assert rows["c"] == 1
+    # One row per migration file
+    migration_count = len(list(migrations_dir.glob("*.sql")))
+    assert rows["c"] == migration_count
 
 
 def test_foreign_keys_enabled(db):
