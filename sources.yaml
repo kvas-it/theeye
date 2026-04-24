@@ -9,3 +9,15 @@ sources:
     link_selector: "div.structItem-title a"
     link_pattern: "/forum/threads/[^/]+\\.\\d+/"
     content_selector: "article.message-body .bbWrapper"
+
+  - name: Kevin Kelly
+    url: https://kevinkelly.substack.com/feed
+    type: rss
+
+  - name: Palladium Letter
+    url: https://letter.palladiummag.com/feed
+    type: rss
+
+  - name: Irrational Analysis
+    url: https://irrationalanalysis.substack.com/feed
+    type: rss
