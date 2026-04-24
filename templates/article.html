@@ -17,6 +17,26 @@
             <button class="btn-fav{% if article.is_favorite %} active{% endif %}"
                     onclick="toggleFav(this, {{ article.id }})">{{ 'unfavorite' if article.is_favorite else 'favorite' }}</button>
         </div>
+        <div class="article-tags">
+            {% for t in article_tags %}
+            <span class="tag-chip">
+                {{ t.name }}
+                <form method="post" action="/article/{{ article.id }}/untag/{{ t.id }}" class="inline">
+                    <button type="submit" class="tag-remove" title="Remove tag">&times;</button>
+                </form>
+            </span>
+            {% endfor %}
+            <form method="post" action="/article/{{ article.id }}/tag" class="inline tag-add-form">
+                <input type="text" name="tag_name" placeholder="add tag..."
+                       list="all-tags" class="tag-input">
+                <button type="submit" class="btn-sm">+</button>
+            </form>
+            <datalist id="all-tags">
+                {% for t in all_tags %}
+                <option value="{{ t.name }}">
+                {% endfor %}
+            </datalist>
+        </div>
     </header>
 
     {% if article.summary_text %}

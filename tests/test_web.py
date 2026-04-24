@@ -116,3 +116,67 @@ def test_note_indicator_in_feed(client):
     resp = client.get("/")
     # The feed should show a note indicator for article 1
     assert 'has-note' in resp.text
+
+
+def test_add_tag(client):
+    client.post("/article/1/tag", data={"tag_name": "tech"})
+    resp = client.get("/article/1")
+    assert "tech" in resp.text
+
+
+def test_add_tag_creates_new(client):
+    client.post("/article/1/tag", data={"tag_name": "science"})
+    client.post("/article/2/tag", data={"tag_name": "science"})
+    # Both articles should have the same tag (not duplicated)
+    resp = client.get("/article/2")
+    assert "science" in resp.text
+
+
+def test_add_tag_normalizes_case(client):
+    client.post("/article/1/tag", data={"tag_name": "Tech"})
+    resp = client.get("/article/1")
+    assert "tech" in resp.text
+
+
+def test_remove_tag(client):
+    client.post("/article/1/tag", data={"tag_name": "removeme"})
+    resp = client.get("/article/1")
+    # Tag chip should be present (with remove button)
+    assert "tag-remove" in resp.text
+    # Remove it (tag id will be 1 since it's the first tag)
+    client.post("/article/1/untag/1")
+    resp = client.get("/article/1")
+    # No more tag chips with remove buttons for this article
+    assert "tag-remove" not in resp.text
+
+
+def test_filter_by_tag(client):
+    client.post("/article/1/tag", data={"tag_name": "alpha"})
+    # Filter by tag 1 — should show only article 1
+    resp = client.get("/?tag=1")
+    assert resp.status_code == 200
+    assert "First Post" in resp.text or "Better Title" in resp.text
+    assert "Second Post" not in resp.text
+
+
+def test_delete_tag(client):
+    client.post("/article/1/tag", data={"tag_name": "obsolete"})
+    client.post("/tags/1/delete")
+    # Tag should be gone from article
+    resp = client.get("/article/1")
+    assert "obsolete" not in resp.text
+
+
+def test_tags_shown_in_feed(client):
+    client.post("/article/1/tag", data={"tag_name": "ai"})
+    resp = client.get("/")
+    assert "tag-chip" in resp.text
+    assert "ai" in resp.text
+
+
+def test_empty_tag_ignored(client):
+    resp = client.post(
+        "/article/1/tag", data={"tag_name": ""},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303

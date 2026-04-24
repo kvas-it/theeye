@@ -32,6 +32,7 @@ def feed(
     page: int = Query(1, ge=1),
     source: str | None = Query(None),
     status: str = Query("all"),  # all, unread, read, favorites
+    tag: str | None = Query(None),
 ):
     db = get_conn()
     try:
@@ -49,6 +50,14 @@ def feed(
             conditions.append("r.article_id IS NOT NULL")
         elif status == "favorites":
             conditions.append("f.article_id IS NOT NULL")
+
+        tag_id = int(tag) if tag else None
+        if tag_id:
+            conditions.append(
+                "EXISTS (SELECT 1 FROM article_tags at"
+                " WHERE at.article_id = a.id AND at.tag_id = ?)"
+            )
+            params.append(tag_id)
 
         where = ""
         if conditions:
@@ -72,7 +81,11 @@ def feed(
                    sm.summary_title, sm.summary_text,
                    r.read_at,
                    n.id as note_id,
-                   f.article_id as is_favorite
+                   f.article_id as is_favorite,
+                   (SELECT GROUP_CONCAT(t.name, ', ')
+                    FROM article_tags at2
+                    JOIN tags t ON at2.tag_id = t.id
+                    WHERE at2.article_id = a.id) as tag_names
             FROM articles a
             JOIN sources s ON a.source_id = s.id
             LEFT JOIN summaries sm ON a.id = sm.article_id
@@ -87,19 +100,24 @@ def feed(
             query, params + [ITEMS_PER_PAGE, offset]
         ).fetchall()
 
-        # Get all sources for filter dropdown
+        # Get all sources and tags for filter dropdowns
         sources = db.execute(
             "SELECT id, name FROM sources ORDER BY name"
+        ).fetchall()
+        tags = db.execute(
+            "SELECT id, name FROM tags ORDER BY name"
         ).fetchall()
 
         return templates.TemplateResponse(request, "feed.html", {
             "articles": articles,
             "sources": sources,
+            "tags": tags,
             "page": page,
             "total_pages": total_pages,
             "total": total,
             "current_source": source_id,
             "current_status": status,
+            "current_tag": tag_id,
         })
     finally:
         db.close()
@@ -134,8 +152,21 @@ def article_detail(request: Request, article_id: int):
         )
         db.commit()
 
+        article_tags = db.execute("""
+            SELECT t.id, t.name FROM tags t
+            JOIN article_tags at ON t.id = at.tag_id
+            WHERE at.article_id = ?
+            ORDER BY t.name
+        """, (article_id,)).fetchall()
+
+        all_tags = db.execute(
+            "SELECT id, name FROM tags ORDER BY name"
+        ).fetchall()
+
         return templates.TemplateResponse(request, "article.html", {
             "article": article,
+            "article_tags": article_tags,
+            "all_tags": all_tags,
         })
     finally:
         db.close()
@@ -232,5 +263,58 @@ def save_note(article_id: int, text: str = Form("")):
             )
         db.commit()
         return RedirectResponse(f"/article/{article_id}", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/article/{article_id}/tag")
+def add_tag(article_id: int, tag_name: str = Form("")):
+    name = tag_name.strip().lower()
+    if not name:
+        return RedirectResponse(f"/article/{article_id}", status_code=303)
+    db = get_conn()
+    try:
+        db.execute(
+            "INSERT OR IGNORE INTO tags (name) VALUES (?)", (name,),
+        )
+        tag_id = db.execute(
+            "SELECT id FROM tags WHERE name = ?", (name,),
+        ).fetchone()["id"]
+        db.execute(
+            "INSERT OR IGNORE INTO article_tags (article_id, tag_id)"
+            " VALUES (?, ?)",
+            (article_id, tag_id),
+        )
+        db.commit()
+        return RedirectResponse(f"/article/{article_id}", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/article/{article_id}/untag/{tag_id}")
+def remove_tag(article_id: int, tag_id: int):
+    db = get_conn()
+    try:
+        db.execute(
+            "DELETE FROM article_tags"
+            " WHERE article_id = ? AND tag_id = ?",
+            (article_id, tag_id),
+        )
+        db.commit()
+        return RedirectResponse(f"/article/{article_id}", status_code=303)
+    finally:
+        db.close()
+
+
+@app.post("/tags/{tag_id}/delete")
+def delete_tag(tag_id: int):
+    db = get_conn()
+    try:
+        db.execute(
+            "DELETE FROM article_tags WHERE tag_id = ?", (tag_id,),
+        )
+        db.execute("DELETE FROM tags WHERE id = ?", (tag_id,))
+        db.commit()
+        return RedirectResponse("/", status_code=303)
     finally:
         db.close()

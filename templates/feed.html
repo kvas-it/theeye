@@ -18,6 +18,17 @@
             <option value="read" {% if current_status == 'read' %}selected{% endif %}>Read</option>
             <option value="favorites" {% if current_status == 'favorites' %}selected{% endif %}>Favorites</option>
         </select>
+        {% if tags %}
+        <select name="tag" onchange="this.form.submit()">
+            <option value="">All tags</option>
+            {% for t in tags %}
+            <option value="{{ t.id }}"
+                {% if current_tag == t.id %}selected{% endif %}>
+                {{ t.name }}
+            </option>
+            {% endfor %}
+        </select>
+        {% endif %}
     </form>
     <span class="count">{{ total }} articles</span>
 </div>
@@ -30,6 +41,13 @@
             <span class="source">{{ a.source_name }}</span>
             {% if a.author %}<span class="author">{{ a.author }}</span>{% endif %}
             {% if a.note_id %}<span class="has-note" title="Has notes">*</span>{% endif %}
+            {% if a.tag_names %}
+            <span class="tag-chips">
+                {% for tag in a.tag_names.split(', ') %}
+                <span class="tag-chip">{{ tag }}</span>
+                {% endfor %}
+            </span>
+            {% endif %}
         </div>
         <h2>
             <a href="/article/{{ a.id }}">
@@ -67,11 +85,11 @@
 {% if total_pages > 1 %}
 <nav class="pagination">
     {% if page > 1 %}
-    <a href="?page={{ page - 1 }}{% if current_source %}&source={{ current_source }}{% endif %}&status={{ current_status }}">prev</a>
+    <a href="?page={{ page - 1 }}{% if current_source %}&source={{ current_source }}{% endif %}&status={{ current_status }}{% if current_tag %}&tag={{ current_tag }}{% endif %}">prev</a>
     {% endif %}
     <span>{{ page }} / {{ total_pages }}</span>
     {% if page < total_pages %}
-    <a href="?page={{ page + 1 }}{% if current_source %}&source={{ current_source }}{% endif %}&status={{ current_status }}">next</a>
+    <a href="?page={{ page + 1 }}{% if current_source %}&source={{ current_source }}{% endif %}&status={{ current_status }}{% if current_tag %}&tag={{ current_tag }}{% endif %}">next</a>
     {% endif %}
 </nav>
 {% endif %}
