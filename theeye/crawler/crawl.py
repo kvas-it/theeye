@@ -1,6 +1,6 @@
 import logging
 import sqlite3
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import feedparser
 import httpx
@@ -119,6 +119,84 @@ def crawl_rss(
 
     db.commit()
     return new_count
+
+
+MANUAL_SOURCE_NAME = "Manual"
+
+
+def match_source_by_hostname(
+    db: sqlite3.Connection, url: str,
+) -> int | None:
+    """Find a source whose URL shares a hostname with the given URL."""
+    hostname = urlparse(url).hostname
+    if not hostname:
+        return None
+    sources = db.execute("SELECT id, url FROM sources").fetchall()
+    for source in sources:
+        source_host = urlparse(source["url"]).hostname
+        if source_host and source_host == hostname:
+            return source["id"]
+    return None
+
+
+def get_manual_source(db: sqlite3.Connection) -> int:
+    """Get or create the Manual catch-all source."""
+    row = db.execute(
+        "SELECT id FROM sources WHERE name = ?", (MANUAL_SOURCE_NAME,),
+    ).fetchone()
+    if row:
+        return row["id"]
+    cur = db.execute(
+        "INSERT INTO sources (name, url, type) VALUES (?, ?, ?)",
+        (MANUAL_SOURCE_NAME, "", "manual"),
+    )
+    db.commit()
+    return cur.lastrowid
+
+
+def crawl_url(db: sqlite3.Connection, url: str) -> bool:
+    """Crawl a single URL. Returns True if successful."""
+    client = httpx.Client(
+        headers={"User-Agent": "TheEye/0.1 (feed aggregator)"},
+    )
+    try:
+        html = fetch_page(client, url)
+        if not html:
+            log.error("Failed to fetch %s", url)
+            return False
+
+        title, content_text = extract_text(html, url)
+
+        # Match to existing source or use Manual
+        source_id = match_source_by_hostname(db, url)
+        if source_id is None:
+            source_id = get_manual_source(db)
+            log.info("No matching source, using Manual")
+
+        existing = db.execute(
+            "SELECT id FROM articles WHERE url = ?", (url,),
+        ).fetchone()
+
+        if existing:
+            db.execute(
+                """UPDATE articles SET title = ?, content_text = ?
+                   WHERE id = ?""",
+                (title, content_text, existing["id"]),
+            )
+            log.info("Updated: %s", title or url)
+        else:
+            db.execute(
+                """INSERT INTO articles
+                   (source_id, url, title, content_text)
+                   VALUES (?, ?, ?, ?)""",
+                (source_id, url, title, content_text),
+            )
+            log.info("Added: %s", title or url)
+
+        db.commit()
+        return True
+    finally:
+        client.close()
 
 
 def crawl_all(db: sqlite3.Connection, sources: list[Source]):

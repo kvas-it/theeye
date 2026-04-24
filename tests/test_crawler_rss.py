@@ -3,6 +3,8 @@ from unittest.mock import patch, MagicMock
 from theeye.config import Source
 from theeye.crawler.crawl import (
     ensure_source, article_exists, extract_text, crawl_rss,
+    match_source_by_hostname, get_manual_source, crawl_url,
+    MANUAL_SOURCE_NAME,
 )
 
 SAMPLE_RSS = """\
@@ -118,3 +120,119 @@ def test_crawl_rss_skips_existing(db):
         count = crawl_rss(db, mock_client, src, source_id)
 
     assert count == 1  # only post2 is new
+
+
+# --- crawl_url tests ---
+
+def test_match_source_by_hostname(db):
+    db.execute(
+        "INSERT INTO sources (name, url, type) VALUES (?, ?, ?)",
+        ("Example", "https://example.com/feed", "rss"),
+    )
+    db.commit()
+    assert match_source_by_hostname(db, "https://example.com/post1") == 1
+    assert match_source_by_hostname(db, "https://other.com/post") is None
+
+
+def test_get_manual_source_creates(db):
+    sid = get_manual_source(db)
+    assert sid is not None
+    row = db.execute(
+        "SELECT name FROM sources WHERE id = ?", (sid,),
+    ).fetchone()
+    assert row["name"] == MANUAL_SOURCE_NAME
+    # Second call returns same id
+    assert get_manual_source(db) == sid
+
+
+def test_crawl_url_new_article(db):
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_HTML
+    mock_resp.raise_for_status = MagicMock()
+    mock_client = MagicMock()
+    mock_client.get.return_value = mock_resp
+
+    with patch("theeye.crawler.crawl.httpx.Client", return_value=mock_client):
+        ok = crawl_url(db, "https://example.com/post1")
+
+    assert ok
+    row = db.execute("SELECT * FROM articles WHERE url = ?",
+                     ("https://example.com/post1",)).fetchone()
+    assert row is not None
+    assert row["title"] == "First Post"
+    assert "content of the first post" in row["content_text"]
+
+
+def test_crawl_url_matches_existing_source(db):
+    db.execute(
+        "INSERT INTO sources (name, url, type) VALUES (?, ?, ?)",
+        ("Example Blog", "https://example.com/feed", "rss"),
+    )
+    db.commit()
+
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_HTML
+    mock_resp.raise_for_status = MagicMock()
+    mock_client = MagicMock()
+    mock_client.get.return_value = mock_resp
+
+    with patch("theeye.crawler.crawl.httpx.Client", return_value=mock_client):
+        crawl_url(db, "https://example.com/post1")
+
+    row = db.execute("SELECT source_id FROM articles").fetchone()
+    assert row["source_id"] == 1  # matched to Example Blog
+
+
+def test_crawl_url_uses_manual_source(db):
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_HTML
+    mock_resp.raise_for_status = MagicMock()
+    mock_client = MagicMock()
+    mock_client.get.return_value = mock_resp
+
+    with patch("theeye.crawler.crawl.httpx.Client", return_value=mock_client):
+        crawl_url(db, "https://example.com/post1")
+
+    row = db.execute("SELECT source_id FROM articles").fetchone()
+    source = db.execute(
+        "SELECT name FROM sources WHERE id = ?", (row["source_id"],),
+    ).fetchone()
+    assert source["name"] == MANUAL_SOURCE_NAME
+
+
+def test_crawl_url_recrawl_updates(db):
+    # First crawl
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_HTML
+    mock_resp.raise_for_status = MagicMock()
+    mock_client = MagicMock()
+    mock_client.get.return_value = mock_resp
+
+    with patch("theeye.crawler.crawl.httpx.Client", return_value=mock_client):
+        crawl_url(db, "https://example.com/post1")
+
+    # Re-crawl with updated content
+    updated_html = SAMPLE_HTML.replace("First Post", "Updated Post")
+    mock_resp2 = MagicMock()
+    mock_resp2.text = updated_html
+    mock_resp2.raise_for_status = MagicMock()
+    mock_client2 = MagicMock()
+    mock_client2.get.return_value = mock_resp2
+
+    with patch("theeye.crawler.crawl.httpx.Client", return_value=mock_client2):
+        crawl_url(db, "https://example.com/post1")
+
+    rows = db.execute("SELECT * FROM articles").fetchall()
+    assert len(rows) == 1  # no duplicate
+    assert rows[0]["title"] == "Updated Post"
+
+
+def test_crawl_url_fetch_failure(db):
+    mock_client = MagicMock()
+    mock_client.get.side_effect = Exception("connection failed")
+
+    with patch("theeye.crawler.crawl.httpx.Client", return_value=mock_client):
+        ok = crawl_url(db, "https://example.com/broken")
+
+    assert not ok
+    assert db.execute("SELECT COUNT(*) as c FROM articles").fetchone()["c"] == 0

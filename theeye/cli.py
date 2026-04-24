@@ -14,6 +14,18 @@ def cmd_crawl(args):
     crawl_all(db, config.sources)
 
 
+def cmd_add(args):
+    from theeye.config import load_config
+    from theeye.db import get_db, run_migrations
+    from theeye.crawler.crawl import crawl_url
+
+    config = load_config(args.sources)
+    db = get_db(config.db_path)
+    run_migrations(db)
+    if not crawl_url(db, args.url):
+        sys.exit(1)
+
+
 def cmd_summarize(args):
     from theeye.config import load_config
     from theeye.db import get_db, run_migrations
@@ -60,6 +72,9 @@ def main():
 
     sub.add_parser("crawl", help="Crawl all configured sources")
 
+    p_add = sub.add_parser("add", help="Add a single article by URL")
+    p_add.add_argument("url", help="URL of the article to crawl")
+
     p_sum = sub.add_parser("summarize", help="Summarize new articles")
     p_sum.add_argument(
         "--limit", type=int, default=0,
@@ -89,8 +104,8 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    handler = {"crawl": cmd_crawl, "summarize": cmd_summarize,
-               "serve": cmd_serve}
+    handler = {"crawl": cmd_crawl, "add": cmd_add,
+               "summarize": cmd_summarize, "serve": cmd_serve}
     handler[args.command](args)
 
 
