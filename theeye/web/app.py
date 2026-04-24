@@ -4,7 +4,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request, Form, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -191,12 +191,7 @@ def mark_unread(
 
 
 @app.post("/article/{article_id}/favorite")
-def toggle_favorite(
-    article_id: int,
-    page: str = Form("1"),
-    status: str = Form("all"),
-    source: str = Form(""),
-):
+def toggle_favorite(article_id: int):
     db = get_conn()
     try:
         exists = db.execute(
@@ -206,13 +201,15 @@ def toggle_favorite(
             db.execute(
                 "DELETE FROM favorites WHERE article_id = ?", (article_id,),
             )
+            favorited = False
         else:
             db.execute(
                 "INSERT INTO favorites (article_id) VALUES (?)",
                 (article_id,),
             )
+            favorited = True
         db.commit()
-        return _feed_redirect(page, status, source)
+        return JSONResponse({"favorited": favorited})
     finally:
         db.close()
 

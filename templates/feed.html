@@ -40,12 +40,8 @@
         <p class="summary">{{ a.summary_text }}</p>
         {% endif %}
         <div class="feed-item-footer">
-            <form method="post" action="/article/{{ a.id }}/favorite" class="inline">
-                <input type="hidden" name="page" value="{{ page }}">
-                <input type="hidden" name="status" value="{{ current_status }}">
-                {% if current_source %}<input type="hidden" name="source" value="{{ current_source }}">{% endif %}
-                <button type="submit" class="btn-star{% if a.is_favorite %} active{% endif %}" title="{{ 'Unfavorite' if a.is_favorite else 'Favorite' }}">{{ '*' if a.is_favorite else '-' }}</button>
-            </form>
+            <button class="btn-fav{% if a.is_favorite %} active{% endif %}"
+                    onclick="toggleFav(this, {{ a.id }})">{{ 'unfavorite' if a.is_favorite else 'favorite' }}</button>
             <a href="{{ a.url }}" class="original-link" target="_blank" rel="noopener">original</a>
             <time>{{ a.published_at or a.discovered_at }}</time>
             {% if a.read_at %}
@@ -83,4 +79,17 @@
 {% else %}
 <p class="empty">No articles yet. Run <code>theeye crawl</code> to fetch some.</p>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleFav(btn, id) {
+    fetch('/article/' + id + '/favorite', {method: 'POST'})
+        .then(r => r.json())
+        .then(data => {
+            btn.classList.toggle('active', data.favorited);
+            btn.textContent = data.favorited ? 'unfavorite' : 'favorite';
+        });
+}
+</script>
 {% endblock %}

@@ -14,9 +14,8 @@
         {% endif %}
         <div class="article-actions">
             <a href="{{ article.url }}" target="_blank" rel="noopener" class="original-link">Read original</a>
-            <form method="post" action="/article/{{ article.id }}/favorite" class="inline">
-                <button type="submit" class="btn-star{% if article.is_favorite %} active{% endif %}">{{ 'Unfavorite' if article.is_favorite else 'Favorite' }}</button>
-            </form>
+            <button class="btn-fav{% if article.is_favorite %} active{% endif %}"
+                    onclick="toggleFav(this, {{ article.id }})">{{ 'unfavorite' if article.is_favorite else 'favorite' }}</button>
         </div>
     </header>
 
@@ -46,4 +45,17 @@
         <a href="/">&larr; Back to feed</a>
     </footer>
 </article>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleFav(btn, id) {
+    fetch('/article/' + id + '/favorite', {method: 'POST'})
+        .then(r => r.json())
+        .then(data => {
+            btn.classList.toggle('active', data.favorited);
+            btn.textContent = data.favorited ? 'unfavorite' : 'favorite';
+        });
+}
+</script>
 {% endblock %}
