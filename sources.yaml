@@ -21,3 +21,15 @@ sources:
   - name: Irrational Analysis
     url: https://irrationalanalysis.substack.com/feed
     type: rss
+
+  - name: Fabricated Knowledge
+    url: https://www.fabricatedknowledge.com/feed
+    type: rss
+
+  - name: LessWrong
+    url: https://www.lesswrong.com/feed.xml?view=frontpage-rss&karmaThreshold=45
+    type: rss
+
+  - name: SemiAnalysis
+    url: https://newsletter.semianalysis.com/feed
+    type: rss
