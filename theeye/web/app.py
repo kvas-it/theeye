@@ -31,7 +31,7 @@ def feed(
     request: Request,
     page: int = Query(1, ge=1),
     source: str | None = Query(None),
-    status: str = Query("all"),  # all, unread, read, favorites
+    status: str = Query("unread"),  # all, unread, read, favorites
     tag: str | None = Query(None),
 ):
     db = get_conn()
@@ -176,7 +176,7 @@ def _feed_redirect(page: str, status: str, source: str) -> RedirectResponse:
     params = {}
     if page and page != "1":
         params["page"] = page
-    if status and status != "all":
+    if status and status != "unread":
         params["status"] = status
     if source:
         params["source"] = source
@@ -188,7 +188,7 @@ def _feed_redirect(page: str, status: str, source: str) -> RedirectResponse:
 def mark_read(
     article_id: int,
     page: str = Form("1"),
-    status: str = Form("all"),
+    status: str = Form("unread"),
     source: str = Form(""),
 ):
     db = get_conn()
@@ -207,7 +207,7 @@ def mark_read(
 def mark_unread(
     article_id: int,
     page: str = Form("1"),
-    status: str = Form("all"),
+    status: str = Form("unread"),
     source: str = Form(""),
 ):
     db = get_conn()

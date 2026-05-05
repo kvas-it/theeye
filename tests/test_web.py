@@ -52,6 +52,23 @@ def test_feed_page(client):
     assert "Test Source" in resp.text
 
 
+def test_feed_default_filter_is_unread(client):
+    # Mark first article as read; default feed should hide it.
+    client.post("/article/1/read")
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert "Second Post" in resp.text
+    assert "Better Title for First Post" not in resp.text
+
+
+def test_feed_filter_all_shows_read(client):
+    client.post("/article/1/read")
+    resp = client.get("/?status=all")
+    assert resp.status_code == 200
+    assert "Better Title for First Post" in resp.text
+    assert "Second Post" in resp.text
+
+
 def test_feed_filter_unread(client):
     # Mark first article as read
     client.post("/article/1/read")
@@ -113,7 +130,7 @@ def test_delete_note(client):
 
 def test_note_indicator_in_feed(client):
     client.post("/article/1/note", data={"text": "A note"})
-    resp = client.get("/")
+    resp = client.get("/?status=all")
     # The feed should show a note indicator for article 1
     assert 'has-note' in resp.text
 
@@ -153,7 +170,7 @@ def test_remove_tag(client):
 def test_filter_by_tag(client):
     client.post("/article/1/tag", data={"tag_name": "alpha"})
     # Filter by tag 1 — should show only article 1
-    resp = client.get("/?tag=1")
+    resp = client.get("/?tag=1&status=all")
     assert resp.status_code == 200
     assert "First Post" in resp.text or "Better Title" in resp.text
     assert "Second Post" not in resp.text
@@ -169,7 +186,7 @@ def test_delete_tag(client):
 
 def test_tags_shown_in_feed(client):
     client.post("/article/1/tag", data={"tag_name": "ai"})
-    resp = client.get("/")
+    resp = client.get("/?status=all")
     assert "tag-chip" in resp.text
     assert "ai" in resp.text
 
