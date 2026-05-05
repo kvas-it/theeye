@@ -12,3 +12,6 @@ build/
 .coverage
 htmlcov/
 *.log
+
+# Local config — copy sources.example.yaml to sources.yaml
+sources.yaml

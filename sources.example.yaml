@@ -1,0 +1,19 @@
+sources:
+  # RSS / Atom feed — most blogs and Substacks
+  - name: Overcoming Bias
+    url: https://www.overcomingbias.com/feed
+    type: rss
+
+  - name: Example Substack
+    url: https://example.substack.com/feed
+    type: rss
+
+  # Web page that links to articles. Use link_selector to find article
+  # links, link_pattern to filter them, content_selector to extract the
+  # article body (avoids picking up page chrome).
+  - name: SemiWiki Forum
+    url: https://semiwiki.com/forum/forums/semiwiki-main-forum-ask-the-experts.2/
+    type: web
+    link_selector: "div.structItem-title a"
+    link_pattern: "/forum/threads/[^/]+\\.\\d+/"
+    content_selector: "article.message-body .bbWrapper"

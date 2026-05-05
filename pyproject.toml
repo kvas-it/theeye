@@ -6,6 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "theeye"
 version = "0.1.0"
 description = "Web information aggregator with AI-generated summaries"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Vasily Kuznetsov", email = "kvas.it@gmail.com" },
+]
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110",

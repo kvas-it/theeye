@@ -31,7 +31,8 @@ migrations/          # numbered SQL files (001_initial.sql, ...)
 templates/           # Jinja2 HTML templates
 static/              # CSS, JS
 tests/               # pytest tests mirroring src structure
-sources.yaml         # feed source configuration
+sources.example.yaml # example feed config (committed)
+sources.yaml         # local feed config (gitignored)
 ```
 
 ## Key decisions
@@ -47,8 +48,9 @@ sources.yaml         # feed source configuration
   response. Do NOT use `--bare` flag (breaks Max subscription auth).
 - **Frontend**: server-rendered Jinja2 templates. Add htmx for interactivity
   as needed — no JS build step.
-- **Config**: sources in `sources.yaml`, app settings via environment
-  variables or a config file.
+- **Config**: sources in `sources.yaml` (local, gitignored). A committed
+  `sources.example.yaml` shows the format. App settings via environment
+  variables (e.g. `THEEYE_DB`).
 
 ## Testing
 
