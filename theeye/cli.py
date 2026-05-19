@@ -29,6 +29,17 @@ def cmd_add(args):
         sys.exit(1)
 
 
+def cmd_refetch(args):
+    from theeye.config import load_config
+    from theeye.db import get_db, run_migrations
+    from theeye.crawler.crawl import refetch_missing
+
+    config = load_config(args.sources)
+    db = get_db(config.db_path)
+    run_migrations(db)
+    refetch_missing(db, limit=args.limit)
+
+
 def cmd_summarize(args):
     from theeye.config import load_config
     from theeye.db import get_db, run_migrations
@@ -166,6 +177,15 @@ def main():
     p_add = sub.add_parser("add", help="Add a single article by URL")
     p_add.add_argument("url", help="URL of the article to crawl")
 
+    p_refetch = sub.add_parser(
+        "refetch",
+        help="Re-fetch articles whose body is missing (e.g. after 429s)",
+    )
+    p_refetch.add_argument(
+        "--limit", type=int, default=0,
+        help="Max articles to refetch (0 = all)",
+    )
+
     p_sum = sub.add_parser("summarize", help="Summarize new articles")
     p_sum.add_argument(
         "--limit", type=int, default=0,
@@ -222,7 +242,7 @@ def main():
         tag_handler[args.tag_command](args)
         return
 
-    handler = {"crawl": cmd_crawl, "add": cmd_add,
+    handler = {"crawl": cmd_crawl, "add": cmd_add, "refetch": cmd_refetch,
                "summarize": cmd_summarize, "serve": cmd_serve}
     handler[args.command](args)
 

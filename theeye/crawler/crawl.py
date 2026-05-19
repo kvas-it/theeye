@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+import time
 from urllib.parse import urljoin, urlparse
 
 import feedparser
@@ -9,6 +10,14 @@ from readability import Document
 from theeye.config import Source
 
 log = logging.getLogger(__name__)
+
+# Per-host throttling. Sites like LessWrong return 429 if we fetch
+# articles back-to-back without pause.
+MIN_REQUEST_INTERVAL = 1.5  # seconds between requests to the same host
+RETRY_AFTER_DEFAULT = 5.0   # used when 429 response has no Retry-After
+RETRY_AFTER_CAP = 30.0      # never wait longer than this on a single 429
+
+_last_request_time: dict[str, float] = {}
 
 
 def ensure_source(db: sqlite3.Connection, source: Source) -> int:
@@ -65,14 +74,46 @@ def extract_text(
     return title, text
 
 
-def fetch_page(client: httpx.Client, url: str) -> str | None:
+def _throttle(host: str) -> None:
+    """Sleep so consecutive requests to the same host stay polite."""
+    last = _last_request_time.get(host)
+    if last is not None:
+        elapsed = time.monotonic() - last
+        if elapsed < MIN_REQUEST_INTERVAL:
+            time.sleep(MIN_REQUEST_INTERVAL - elapsed)
+    _last_request_time[host] = time.monotonic()
+
+
+def _parse_retry_after(value: str | None) -> float:
+    if not value:
+        return RETRY_AFTER_DEFAULT
     try:
-        resp = client.get(url, follow_redirects=True, timeout=30)
-        resp.raise_for_status()
+        return min(float(value), RETRY_AFTER_CAP)
+    except ValueError:
+        return RETRY_AFTER_DEFAULT
+
+
+def fetch_page(client: httpx.Client, url: str) -> str | None:
+    host = urlparse(url).hostname or ""
+    for attempt in (1, 2):
+        _throttle(host)
+        try:
+            resp = client.get(url, follow_redirects=True, timeout=30)
+        except Exception as e:
+            log.warning("Failed to fetch %s: %s", url, e)
+            return None
+        if resp.status_code == 429 and attempt == 1:
+            delay = _parse_retry_after(resp.headers.get("Retry-After"))
+            log.info("429 from %s, retrying in %.1fs", host, delay)
+            time.sleep(delay)
+            continue
+        try:
+            resp.raise_for_status()
+        except Exception as e:
+            log.warning("Failed to fetch %s: %s", url, e)
+            return None
         return resp.text
-    except Exception as e:
-        log.warning("Failed to fetch %s: %s", url, e)
-        return None
+    return None
 
 
 def crawl_rss(
@@ -195,6 +236,55 @@ def crawl_url(db: sqlite3.Connection, url: str) -> bool:
 
         db.commit()
         return True
+    finally:
+        client.close()
+
+
+def refetch_missing(db: sqlite3.Connection, limit: int = 0) -> int:
+    """Refetch articles whose body extraction previously failed.
+
+    Articles with an empty `content_text` are revisited; on success
+    the title and body are updated in place. Returns the number of
+    articles that now have body content.
+    """
+    query = (
+        "SELECT id, url FROM articles "
+        "WHERE content_text IS NULL OR content_text = ''"
+    )
+    if limit > 0:
+        query += " LIMIT ?"
+        rows = db.execute(query, (limit,)).fetchall()
+    else:
+        rows = db.execute(query).fetchall()
+
+    if not rows:
+        log.info("No articles need refetching.")
+        return 0
+
+    log.info("Refetching %d article(s)", len(rows))
+    client = httpx.Client(
+        headers={"User-Agent": "TheEye/0.1 (feed aggregator)"},
+    )
+    try:
+        success = 0
+        for row in rows:
+            url = row["url"]
+            html = fetch_page(client, url)
+            if not html:
+                continue
+            title, content_text = extract_text(html, url)
+            if not content_text:
+                continue
+            db.execute(
+                "UPDATE articles SET title = COALESCE(?, title), "
+                "content_text = ? WHERE id = ?",
+                (title, content_text, row["id"]),
+            )
+            success += 1
+            log.info("  Refetched: %s", title or url)
+        db.commit()
+        log.info("Refetched %d/%d article(s) successfully", success, len(rows))
+        return success
     finally:
         client.close()
 

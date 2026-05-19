@@ -4,6 +4,7 @@ from theeye.config import Source
 from theeye.crawler.crawl import (
     ensure_source, article_exists, extract_text, crawl_rss,
     match_source_by_hostname, get_manual_source, crawl_url,
+    fetch_page, refetch_missing,
     MANUAL_SOURCE_NAME,
 )
 
@@ -236,3 +237,210 @@ def test_crawl_url_fetch_failure(db):
 
     assert not ok
     assert db.execute("SELECT COUNT(*) as c FROM articles").fetchone()["c"] == 0
+
+
+# --- fetch_page throttling and 429 retry ---
+
+def test_throttle_sleeps_between_same_host_requests(monkeypatch):
+    from theeye.crawler import crawl as cr
+    cr._last_request_time.clear()
+    sleeps = []
+    monkeypatch.setattr(cr.time, "sleep", sleeps.append)
+
+    cr._throttle("example.com")  # first call: no prior, no sleep
+    cr._throttle("example.com")  # second call: should sleep
+
+    assert len(sleeps) == 1
+    assert sleeps[0] > 0
+
+
+def test_throttle_no_sleep_for_different_hosts(monkeypatch):
+    from theeye.crawler import crawl as cr
+    cr._last_request_time.clear()
+    sleeps = []
+    monkeypatch.setattr(cr.time, "sleep", sleeps.append)
+
+    cr._throttle("a.com")
+    cr._throttle("b.com")
+
+    assert sleeps == []
+
+
+def test_fetch_page_retries_once_on_429(monkeypatch):
+    sleeps = []
+    monkeypatch.setattr("theeye.crawler.crawl.time.sleep", sleeps.append)
+
+    resp_429 = MagicMock()
+    resp_429.status_code = 429
+    resp_429.headers = {"Retry-After": "2"}
+
+    resp_ok = MagicMock()
+    resp_ok.status_code = 200
+    resp_ok.text = "<html>ok</html>"
+    resp_ok.raise_for_status = MagicMock()
+
+    client = MagicMock()
+    client.get.side_effect = [resp_429, resp_ok]
+
+    result = fetch_page(client, "https://example.com/x")
+
+    assert result == "<html>ok</html>"
+    assert client.get.call_count == 2
+    # One of the sleeps should be the Retry-After value
+    assert 2.0 in sleeps
+
+
+def test_fetch_page_gives_up_on_second_429(monkeypatch):
+    monkeypatch.setattr("theeye.crawler.crawl.time.sleep", lambda _s: None)
+
+    import httpx as _httpx
+    resp_429 = MagicMock()
+    resp_429.status_code = 429
+    resp_429.headers = {"Retry-After": "0"}
+    resp_429.raise_for_status.side_effect = _httpx.HTTPStatusError(
+        "429", request=MagicMock(), response=resp_429,
+    )
+
+    client = MagicMock()
+    client.get.return_value = resp_429
+
+    result = fetch_page(client, "https://example.com/x")
+
+    assert result is None
+    assert client.get.call_count == 2
+
+
+def test_fetch_page_missing_retry_after_uses_default(monkeypatch):
+    from theeye.crawler import crawl as cr
+    sleeps = []
+    monkeypatch.setattr(cr.time, "sleep", sleeps.append)
+
+    resp_429 = MagicMock()
+    resp_429.status_code = 429
+    resp_429.headers = {}  # no Retry-After
+
+    resp_ok = MagicMock()
+    resp_ok.status_code = 200
+    resp_ok.text = "<html>ok</html>"
+    resp_ok.raise_for_status = MagicMock()
+
+    client = MagicMock()
+    client.get.side_effect = [resp_429, resp_ok]
+
+    fetch_page(client, "https://example.com/x")
+
+    assert cr.RETRY_AFTER_DEFAULT in sleeps
+
+
+# --- refetch_missing ---
+
+def test_refetch_missing_updates_empty_content(db):
+    db.execute(
+        "INSERT INTO sources (name, url, type) VALUES (?, ?, ?)",
+        ("Test", "https://example.com", "rss"),
+    )
+    db.execute(
+        "INSERT INTO articles (source_id, url, title) VALUES (?, ?, ?)",
+        (1, "https://example.com/post1", "Original Title"),
+    )
+    db.commit()
+
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.text = SAMPLE_HTML
+    resp.raise_for_status = MagicMock()
+    client = MagicMock()
+    client.get.return_value = resp
+
+    with patch("theeye.crawler.crawl.httpx.Client", return_value=client):
+        count = refetch_missing(db)
+
+    assert count == 1
+    row = db.execute(
+        "SELECT content_text FROM articles WHERE id = 1"
+    ).fetchone()
+    assert "content of the first post" in row["content_text"]
+
+
+def test_refetch_missing_skips_articles_with_content(db):
+    db.execute(
+        "INSERT INTO sources (name, url, type) VALUES (?, ?, ?)",
+        ("Test", "https://example.com", "rss"),
+    )
+    db.execute(
+        "INSERT INTO articles (source_id, url, title, content_text) "
+        "VALUES (?, ?, ?, ?)",
+        (1, "https://example.com/post1", "First", "already have text"),
+    )
+    db.commit()
+
+    client = MagicMock()
+    with patch("theeye.crawler.crawl.httpx.Client", return_value=client):
+        count = refetch_missing(db)
+
+    assert count == 0
+    client.get.assert_not_called()
+
+
+def test_refetch_missing_counts_only_successful(db):
+    db.execute(
+        "INSERT INTO sources (name, url, type) VALUES (?, ?, ?)",
+        ("Test", "https://example.com", "rss"),
+    )
+    db.execute(
+        "INSERT INTO articles (source_id, url) VALUES (?, ?)",
+        (1, "https://example.com/ok"),
+    )
+    db.execute(
+        "INSERT INTO articles (source_id, url) VALUES (?, ?)",
+        (1, "https://example.com/broken"),
+    )
+    db.commit()
+
+    resp_ok = MagicMock()
+    resp_ok.status_code = 200
+    resp_ok.text = SAMPLE_HTML
+    resp_ok.raise_for_status = MagicMock()
+
+    def fake_get(url, **_kw):
+        if url.endswith("/ok"):
+            return resp_ok
+        raise Exception("nope")
+
+    client = MagicMock()
+    client.get.side_effect = fake_get
+
+    with patch("theeye.crawler.crawl.httpx.Client", return_value=client):
+        count = refetch_missing(db)
+
+    assert count == 1
+    rows = db.execute(
+        "SELECT url, content_text FROM articles ORDER BY id"
+    ).fetchall()
+    assert rows[0]["content_text"] is not None
+    assert rows[1]["content_text"] is None
+
+
+def test_refetch_missing_respects_limit(db):
+    db.execute(
+        "INSERT INTO sources (name, url, type) VALUES (?, ?, ?)",
+        ("Test", "https://example.com", "rss"),
+    )
+    for i in range(3):
+        db.execute(
+            "INSERT INTO articles (source_id, url) VALUES (?, ?)",
+            (1, f"https://example.com/p{i}"),
+        )
+    db.commit()
+
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.text = SAMPLE_HTML
+    resp.raise_for_status = MagicMock()
+    client = MagicMock()
+    client.get.return_value = resp
+
+    with patch("theeye.crawler.crawl.httpx.Client", return_value=client):
+        refetch_missing(db, limit=2)
+
+    assert client.get.call_count == 2
