@@ -143,47 +143,82 @@ def save_article_tags(db, article_id, tag_names, tag_lookup):
             )
 
 
+def build_system_and_schema(tag_lookup):
+    """Pick prompt/schema depending on whether tags exist."""
+    if tag_lookup:
+        tag_list = ", ".join(sorted(tag_lookup))
+        system_prompt = SYSTEM_PROMPT_WITH_TAGS.format(tags=tag_list)
+        return system_prompt, json.dumps(SUMMARY_SCHEMA_WITH_TAGS)
+    return SYSTEM_PROMPT, JSON_SCHEMA
+
+
+def summarize_article(db, article, system_prompt, schema, tag_lookup) -> bool:
+    """Summarize one article row and save the result. Returns success."""
+    prompt = build_prompt(
+        article["title"], article["author"],
+        article["source_name"], article["content_text"],
+    )
+    log.info("Summarizing: %s", article["title"] or f"#{article['id']}")
+
+    result = call_claude(prompt, system_prompt, schema)
+    if not result:
+        log.warning("  Failed, skipping")
+        return False
+
+    # Upsert so re-summarizing (e.g. after re-adding a URL) replaces
+    # the old summary instead of failing on the UNIQUE constraint.
+    db.execute(
+        """INSERT INTO summaries (article_id, summary_title, summary_text)
+           VALUES (?, ?, ?)
+           ON CONFLICT(article_id) DO UPDATE SET
+               summary_title = excluded.summary_title,
+               summary_text = excluded.summary_text,
+               generated_at = CURRENT_TIMESTAMP""",
+        (article["id"], result["summary_title"], result["summary_text"]),
+    )
+
+    if tag_lookup and result.get("tags"):
+        save_article_tags(db, article["id"], result["tags"], tag_lookup)
+
+    db.commit()
+    log.info("  Done: %s", result["summary_title"])
+    return True
+
+
+def summarize_one(db: sqlite3.Connection, article_id: int) -> bool:
+    """Summarize a single article by id, replacing any existing summary."""
+    article = db.execute(
+        """SELECT a.id, a.title, a.author, a.content_text,
+                  s.name as source_name
+           FROM articles a
+           JOIN sources s ON a.source_id = s.id
+           WHERE a.id = ?""",
+        (article_id,),
+    ).fetchone()
+    if article is None:
+        log.error("Article #%d not found", article_id)
+        return False
+    if not article["content_text"]:
+        log.error("Article #%d has no content to summarize", article_id)
+        return False
+
+    tag_lookup = get_all_tags(db)
+    system_prompt, schema = build_system_and_schema(tag_lookup)
+    return summarize_article(db, article, system_prompt, schema, tag_lookup)
+
+
 def summarize_all(db: sqlite3.Connection, limit: int = 0):
     articles = get_unsummarized(db, limit)
     log.info("Found %d articles to summarize", len(articles))
 
-    # Build tagging prompt/schema if tags exist
     tag_lookup = get_all_tags(db)
     if tag_lookup:
-        tag_list = ", ".join(sorted(tag_lookup))
-        system_prompt = SYSTEM_PROMPT_WITH_TAGS.format(tags=tag_list)
-        schema = json.dumps(SUMMARY_SCHEMA_WITH_TAGS)
         log.info("Auto-tagging enabled with %d tags", len(tag_lookup))
-    else:
-        system_prompt = SYSTEM_PROMPT
-        schema = JSON_SCHEMA
+    system_prompt, schema = build_system_and_schema(tag_lookup)
 
     success = 0
     for article in articles:
-        prompt = build_prompt(
-            article["title"], article["author"],
-            article["source_name"], article["content_text"],
-        )
-        log.info("Summarizing: %s", article["title"] or f"#{article['id']}")
-
-        result = call_claude(prompt, system_prompt, schema)
-        if not result:
-            log.warning("  Failed, skipping")
-            continue
-
-        db.execute(
-            """INSERT INTO summaries (article_id, summary_title, summary_text)
-               VALUES (?, ?, ?)""",
-            (article["id"], result["summary_title"], result["summary_text"]),
-        )
-
-        if tag_lookup and result.get("tags"):
-            save_article_tags(
-                db, article["id"], result["tags"], tag_lookup,
-            )
-
-        db.commit()
-        success += 1
-        log.info("  Done: %s", result["summary_title"])
+        if summarize_article(db, article, system_prompt, schema, tag_lookup):
+            success += 1
 
     log.info("Summarized %d/%d articles", success, len(articles))

@@ -195,8 +195,8 @@ def get_manual_source(db: sqlite3.Connection) -> int:
     return cur.lastrowid
 
 
-def crawl_url(db: sqlite3.Connection, url: str) -> bool:
-    """Crawl a single URL. Returns True if successful."""
+def crawl_url(db: sqlite3.Connection, url: str) -> int | None:
+    """Crawl a single URL. Returns the article id, or None on failure."""
     client = httpx.Client(
         headers={"User-Agent": "TheEye/0.1 (feed aggregator)"},
     )
@@ -204,7 +204,7 @@ def crawl_url(db: sqlite3.Connection, url: str) -> bool:
         html = fetch_page(client, url)
         if not html:
             log.error("Failed to fetch %s", url)
-            return False
+            return None
 
         title, content_text = extract_text(html, url)
 
@@ -219,23 +219,25 @@ def crawl_url(db: sqlite3.Connection, url: str) -> bool:
         ).fetchone()
 
         if existing:
+            article_id = existing["id"]
             db.execute(
                 """UPDATE articles SET title = ?, content_text = ?
                    WHERE id = ?""",
-                (title, content_text, existing["id"]),
+                (title, content_text, article_id),
             )
             log.info("Updated: %s", title or url)
         else:
-            db.execute(
+            cursor = db.execute(
                 """INSERT INTO articles
                    (source_id, url, title, content_text)
                    VALUES (?, ?, ?, ?)""",
                 (source_id, url, title, content_text),
             )
+            article_id = cursor.lastrowid
             log.info("Added: %s", title or url)
 
         db.commit()
-        return True
+        return article_id
     finally:
         client.close()
 

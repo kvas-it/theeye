@@ -3,7 +3,7 @@ from unittest.mock import patch, MagicMock
 
 from theeye.summarizer.summarize import (
     get_unsummarized, build_prompt, call_claude, summarize_all,
-    get_all_tags, save_article_tags,
+    summarize_one, get_all_tags, save_article_tags,
     MAX_ARTICLE_CHARS,
 )
 
@@ -136,6 +136,72 @@ def test_summarize_all(db):
     assert row is not None
     assert row["summary_title"] == "Summarized Title"
     assert row["summary_text"] == "This is a summary."
+
+
+def _mock_claude(summary_title, summary_text):
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = json.dumps({
+        "result": json.dumps({
+            "summary_title": summary_title,
+            "summary_text": summary_text,
+        })
+    })
+    return mock_result
+
+
+def test_summarize_one(db):
+    _insert_article(db)
+
+    with patch("theeye.summarizer.summarize.subprocess.run",
+               return_value=_mock_claude("Title", "Summary.")):
+        ok = summarize_one(db, 1)
+
+    assert ok
+    row = db.execute(
+        "SELECT * FROM summaries WHERE article_id = 1"
+    ).fetchone()
+    assert row["summary_title"] == "Title"
+
+
+def test_summarize_one_replaces_existing_summary(db):
+    _insert_article(db)
+    db.execute(
+        """INSERT INTO summaries (article_id, summary_title, summary_text)
+           VALUES (?, ?, ?)""",
+        (1, "Old Title", "Old summary."),
+    )
+    db.commit()
+
+    with patch("theeye.summarizer.summarize.subprocess.run",
+               return_value=_mock_claude("New Title", "New summary.")):
+        ok = summarize_one(db, 1)
+
+    assert ok
+    rows = db.execute(
+        "SELECT * FROM summaries WHERE article_id = 1"
+    ).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["summary_title"] == "New Title"
+    assert rows[0]["summary_text"] == "New summary."
+
+
+def test_summarize_one_missing_article(db):
+    assert not summarize_one(db, 42)
+
+
+def test_summarize_one_no_content(db):
+    db.execute(
+        "INSERT INTO sources (name, url, type) VALUES (?, ?, ?)",
+        ("Test Source", "https://example.com", "rss"),
+    )
+    db.execute(
+        """INSERT INTO articles (source_id, url, title, content_text)
+           VALUES (?, ?, ?, ?)""",
+        (1, "https://example.com/post1", "No Content", None),
+    )
+    db.commit()
+    assert not summarize_one(db, 1)
 
 
 def test_get_all_tags(db):

@@ -154,12 +154,12 @@ def test_crawl_url_new_article(db):
     mock_client.get.return_value = mock_resp
 
     with patch("theeye.crawler.crawl.httpx.Client", return_value=mock_client):
-        ok = crawl_url(db, "https://example.com/post1")
+        article_id = crawl_url(db, "https://example.com/post1")
 
-    assert ok
     row = db.execute("SELECT * FROM articles WHERE url = ?",
                      ("https://example.com/post1",)).fetchone()
     assert row is not None
+    assert article_id == row["id"]
     assert row["title"] == "First Post"
     assert "content of the first post" in row["content_text"]
 
@@ -233,9 +233,9 @@ def test_crawl_url_fetch_failure(db):
     mock_client.get.side_effect = Exception("connection failed")
 
     with patch("theeye.crawler.crawl.httpx.Client", return_value=mock_client):
-        ok = crawl_url(db, "https://example.com/broken")
+        article_id = crawl_url(db, "https://example.com/broken")
 
-    assert not ok
+    assert article_id is None
     assert db.execute("SELECT COUNT(*) as c FROM articles").fetchone()["c"] == 0
 
 

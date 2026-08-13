@@ -25,8 +25,13 @@ def cmd_add(args):
     config = load_config(args.sources)
     db = get_db(config.db_path)
     run_migrations(db)
-    if not crawl_url(db, args.url):
+    article_id = crawl_url(db, args.url)
+    if article_id is None:
         sys.exit(1)
+    if args.summarize:
+        from theeye.summarizer.summarize import summarize_one
+        if not summarize_one(db, article_id):
+            sys.exit(1)
 
 
 def cmd_refetch(args):
@@ -176,6 +181,10 @@ def main():
 
     p_add = sub.add_parser("add", help="Add a single article by URL")
     p_add.add_argument("url", help="URL of the article to crawl")
+    p_add.add_argument(
+        "-s", "--summarize", action="store_true",
+        help="Summarize the article right after adding it",
+    )
 
     p_refetch = sub.add_parser(
         "refetch",
