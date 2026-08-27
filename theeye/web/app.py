@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, Form, Query
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup, escape
 
 from theeye.db import get_db, run_migrations
 
@@ -17,6 +18,25 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 ITEMS_PER_PAGE = 25
+
+# Snippet markers that can't appear in article text; swapped for <mark>
+# after HTML-escaping the snippet.
+_MARK_START = "\x02"
+_MARK_END = "\x03"
+
+
+def fts_query(q: str) -> str:
+    """Quote each token so FTS5 syntax characters in user input can't
+    break the MATCH expression."""
+    tokens = [t.replace('"', "") for t in q.split()]
+    return " ".join(f'"{t}"' for t in tokens if t)
+
+
+def render_snippet(text: str) -> Markup:
+    html = str(escape(text))
+    return Markup(
+        html.replace(_MARK_START, "<mark>").replace(_MARK_END, "</mark>")
+    )
 
 
 def get_conn():
@@ -31,14 +51,33 @@ def feed(
     request: Request,
     page: int = Query(1, ge=1),
     source: str | None = Query(None),
-    status: str = Query("unread"),  # all, unread, read, favorites
+    status: str | None = Query(None),  # all, unread, read, favorites
     tag: str | None = Query(None),
+    q: str = Query(""),
 ):
+    q = q.strip()
+    if status is None:
+        # Searching implies looking through everything, not just unread
+        status = "all" if q else "unread"
+
     db = get_conn()
     try:
         # Build query
         conditions = []
         params = []
+
+        # The FTS join is used for both counting and listing; it also
+        # yields the highlighted snippet for the list.
+        fts_join = ""
+        if q:
+            fts_join = f"""
+                JOIN (SELECT rowid, rank,
+                             snippet(articles_fts, -1, '{_MARK_START}',
+                                     '{_MARK_END}', '…', 24) AS snippet
+                      FROM articles_fts WHERE articles_fts MATCH ?) fts
+                ON fts.rowid = a.id
+            """
+            params.append(fts_query(q))
 
         source_id = int(source) if source else None
         if source_id:
@@ -68,14 +107,19 @@ def feed(
             SELECT COUNT(*) as c FROM articles a
             LEFT JOIN read_state r ON a.id = r.article_id
             LEFT JOIN favorites f ON a.id = f.article_id
+            {fts_join}
             {where}
         """
         total = db.execute(count_q, params).fetchone()["c"]
         total_pages = max(1, (total + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
 
         offset = (page - 1) * ITEMS_PER_PAGE
+        snippet_col = "fts.snippet" if q else "NULL"
+        order_by = "fts.rank" if q else \
+            "COALESCE(a.published_at, a.discovered_at) DESC"
         query = f"""
-            SELECT a.id, a.url, a.title, a.author, a.discovered_at,
+            SELECT {snippet_col} as snippet,
+                   a.id, a.url, a.title, a.author, a.discovered_at,
                    a.published_at,
                    s.name as source_name, s.id as source_id,
                    sm.summary_title, sm.summary_text,
@@ -92,13 +136,19 @@ def feed(
             LEFT JOIN read_state r ON a.id = r.article_id
             LEFT JOIN notes n ON a.id = n.article_id
             LEFT JOIN favorites f ON a.id = f.article_id
+            {fts_join}
             {where}
-            ORDER BY COALESCE(a.published_at, a.discovered_at) DESC
+            ORDER BY {order_by}
             LIMIT ? OFFSET ?
         """
         articles = db.execute(
             query, params + [ITEMS_PER_PAGE, offset]
         ).fetchall()
+        if q:
+            articles = [
+                dict(a, snippet=render_snippet(a["snippet"]))
+                for a in articles
+            ]
 
         # Get all sources and tags for filter dropdowns
         sources = db.execute(
@@ -118,6 +168,7 @@ def feed(
             "current_source": source_id,
             "current_status": status,
             "current_tag": tag_id,
+            "q": q,
         })
     finally:
         db.close()

@@ -29,6 +29,9 @@
             {% endfor %}
         </select>
         {% endif %}
+        <input type="search" name="q" value="{{ q }}" placeholder="search"
+               class="search-box">
+        <button type="submit" class="btn-sm">go</button>
     </form>
     <span class="count">{{ total }} articles</span>
 </div>
@@ -54,7 +57,9 @@
                 {{ a.summary_title or a.title or 'Untitled' }}
             </a>
         </h2>
-        {% if a.summary_text %}
+        {% if a.snippet %}
+        <p class="snippet">{{ a.snippet }}</p>
+        {% elif a.summary_text %}
         <p class="summary">{{ a.summary_text }}</p>
         {% endif %}
         <div class="feed-item-footer">
@@ -85,17 +90,21 @@
 {% if total_pages > 1 %}
 <nav class="pagination">
     {% if page > 1 %}
-    <a href="?page={{ page - 1 }}{% if current_source %}&source={{ current_source }}{% endif %}&status={{ current_status }}{% if current_tag %}&tag={{ current_tag }}{% endif %}">prev</a>
+    <a href="?page={{ page - 1 }}{% if current_source %}&source={{ current_source }}{% endif %}&status={{ current_status }}{% if current_tag %}&tag={{ current_tag }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">prev</a>
     {% endif %}
     <span>{{ page }} / {{ total_pages }}</span>
     {% if page < total_pages %}
-    <a href="?page={{ page + 1 }}{% if current_source %}&source={{ current_source }}{% endif %}&status={{ current_status }}{% if current_tag %}&tag={{ current_tag }}{% endif %}">next</a>
+    <a href="?page={{ page + 1 }}{% if current_source %}&source={{ current_source }}{% endif %}&status={{ current_status }}{% if current_tag %}&tag={{ current_tag }}{% endif %}{% if q %}&q={{ q|urlencode }}{% endif %}">next</a>
     {% endif %}
 </nav>
 {% endif %}
 
 {% else %}
+{% if q %}
+<p class="empty">Nothing found for "{{ q }}".</p>
+{% else %}
 <p class="empty">No articles yet. Run <code>theeye crawl</code> to fetch some.</p>
+{% endif %}
 {% endif %}
 {% endblock %}
 

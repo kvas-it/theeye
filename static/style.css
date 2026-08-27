@@ -49,6 +49,13 @@ header nav {
     border-radius: 4px;
     background: #fff;
 }
+.search-box {
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+.snippet { color: var(--muted); font-size: 0.9rem; }
+mark { background: #fff3a0; padding: 0 0.1em; }
 .count { color: var(--muted); font-size: 0.9rem; margin-left: auto; }
 
 /* Feed items */

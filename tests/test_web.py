@@ -197,3 +197,84 @@ def test_empty_tag_ignored(client):
         follow_redirects=False,
     )
     assert resp.status_code == 303
+
+
+def test_search_matches_content(client):
+    resp = client.get("/?q=second")
+    assert resp.status_code == 200
+    assert "Second Post" in resp.text
+    assert "First Post" not in resp.text
+    assert "<mark>Second</mark>" in resp.text
+
+
+def test_search_matches_summary(client):
+    resp = client.get("/?q=summary")
+    assert "Better Title for First Post" in resp.text
+    assert "Second Post" not in resp.text
+
+
+def test_search_includes_read_articles_by_default(client):
+    client.post("/article/1/read")
+    resp = client.get("/?q=first")
+    assert "Better Title for First Post" in resp.text
+
+
+def test_search_respects_status_filter(client):
+    client.post("/article/1/read")
+    resp = client.get("/?q=first&status=unread")
+    assert "Better Title for First Post" not in resp.text
+
+
+def test_search_tolerates_fts_syntax(client):
+    resp = client.get('/?q=first OR "unclosed (weird')
+    assert resp.status_code == 200
+
+
+def test_search_no_results(client):
+    resp = client.get("/?q=zzzqqq")
+    assert resp.status_code == 200
+    assert "Nothing found" in resp.text
+
+
+def test_search_snippet_escapes_html(client):
+    import sqlite3
+    db = sqlite3.connect(os.environ["THEEYE_DB"])
+    db.execute(
+        "UPDATE articles SET content_text = 'kumquat <script>x</script>'"
+        " WHERE id = 2"
+    )
+    db.commit()
+    db.close()
+    resp = client.get("/?q=kumquat")
+    assert "<mark>kumquat</mark>" in resp.text
+    assert "<script>x</script>" not in resp.text
+    assert "&lt;script&gt;" in resp.text
+
+
+def test_fts_index_follows_updates(client):
+    import sqlite3
+    db = sqlite3.connect(os.environ["THEEYE_DB"])
+    db.execute(
+        "UPDATE articles SET content_text = 'now about giraffes' WHERE id = 2"
+    )
+    db.execute(
+        "INSERT INTO summaries (article_id, summary_text)"
+        " VALUES (2, 'a summary mentioning zebras')"
+    )
+    db.commit()
+    db.close()
+    assert "Second Post" in client.get("/?q=giraffes").text
+    assert "Second Post" in client.get("/?q=zebras").text
+    # Old content no longer indexed
+    assert "Second Post" not in client.get("/?q=content").text
+
+
+def test_search_matches_notes(client):
+    client.post("/article/2/note", data={"text": "remember the pelican"})
+    assert "Second Post" in client.get("/?q=pelican").text
+    client.post("/article/2/note", data={"text": "changed"})
+    assert "Second Post" not in client.get("/?q=pelican").text
+    client.post("/article/2/note", data={"text": ""})
+    assert "Second Post" not in client.get("/?q=changed").text
+    # Article itself still searchable after note deletion
+    assert "Second Post" in client.get("/?q=second").text
