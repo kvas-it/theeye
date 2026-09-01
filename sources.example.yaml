@@ -8,6 +8,13 @@ sources:
     url: https://example.substack.com/feed
     type: rss
 
+  # Site whose article pages are behind bot protection but whose feed
+  # embeds full post HTML: skip page fetches, use the feed content.
+  - name: LessWrong
+    url: https://www.lesswrong.com/feed.xml?view=frontpage-rss&karmaThreshold=45
+    type: rss
+    prefer_feed_content: true
+
   # Web page that links to articles. Use link_selector to find article
   # links, link_pattern to filter them, content_selector to extract the
   # article body (avoids picking up page chrome).

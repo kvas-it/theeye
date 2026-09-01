@@ -13,6 +13,9 @@ class Source:
     link_selector: str | None = None
     link_pattern: str | None = None
     content_selector: str | None = None
+    # Take article text from the feed itself instead of fetching pages.
+    # For sites whose pages are behind bot protection (e.g. LessWrong).
+    prefer_feed_content: bool = False
 
 
 @dataclass
@@ -36,6 +39,7 @@ def load_sources(path: str | Path) -> list[Source]:
             link_selector=s.get("link_selector"),
             link_pattern=s.get("link_pattern"),
             content_selector=s.get("content_selector"),
+            prefer_feed_content=s.get("prefer_feed_content", False),
         ))
     return sources
 

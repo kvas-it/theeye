@@ -489,3 +489,44 @@ def test_crawl_rss_falls_back_to_feed_content(db):
         ("https://example.com/embedded",),
     ).fetchone()
     assert row["content_text"] == "Full text from the feed itself."
+
+
+def test_crawl_rss_prefer_feed_content_skips_fetch(db):
+    src = Source(
+        name="Test", url="https://example.com/feed", type="rss",
+        prefer_feed_content=True,
+    )
+    sid = ensure_source(db, src)
+    client = MagicMock()
+    import feedparser
+    parsed = feedparser.parse(RSS_WITH_CONTENT)
+    with patch("theeye.crawler.crawl.feedparser.parse", return_value=parsed), \
+         patch("theeye.crawler.crawl.fetch_page") as mock_fetch:
+        count = crawl_rss(db, client, src, sid)
+    assert count == 1
+    mock_fetch.assert_not_called()
+    row = db.execute(
+        "SELECT content_text FROM articles WHERE url = ?",
+        ("https://example.com/embedded",),
+    ).fetchone()
+    assert row["content_text"] == "Full text from the feed itself."
+
+
+def test_crawl_rss_prefer_feed_content_falls_back_to_fetch(db):
+    # Feed without embedded content: still fetch the page.
+    src = Source(
+        name="Test", url="https://example.com/feed", type="rss",
+        prefer_feed_content=True,
+    )
+    sid = ensure_source(db, src)
+    client = MagicMock()
+    import feedparser
+    parsed = feedparser.parse(SAMPLE_RSS)
+    with patch("theeye.crawler.crawl.feedparser.parse", return_value=parsed), \
+         patch("theeye.crawler.crawl.fetch_page", return_value=SAMPLE_HTML):
+        crawl_rss(db, client, src, sid)
+    row = db.execute(
+        "SELECT content_text FROM articles WHERE url = ?",
+        ("https://example.com/post1",),
+    ).fetchone()
+    assert "content of the first post" in row["content_text"]

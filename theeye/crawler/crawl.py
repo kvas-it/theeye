@@ -166,12 +166,15 @@ def crawl_rss(
         published = entry.get("published")
         content_text = None
 
-        html = fetch_page(client, url)
-        if html:
-            extracted_title, content_text = extract_text(html, url)
-            if not title:
-                title = extracted_title
+        if source.prefer_feed_content:
+            content_text = feed_entry_text(entry)
         if not content_text:
+            html = fetch_page(client, url)
+            if html:
+                extracted_title, content_text = extract_text(html, url)
+                if not title:
+                    title = extracted_title
+        if not content_text and not source.prefer_feed_content:
             # Page fetch blocked or extraction failed; fall back to
             # content embedded in the feed.
             content_text = feed_entry_text(entry)

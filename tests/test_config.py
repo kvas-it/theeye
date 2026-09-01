@@ -53,3 +53,18 @@ def test_load_config_db_from_env(tmp_path, monkeypatch):
     p.write_text("sources: []")
     config = load_config(p)
     assert config.db_path == "/tmp/custom.db"
+
+
+def test_load_sources_prefer_feed_content(tmp_path):
+    f = tmp_path / "sources.yaml"
+    f.write_text("""
+sources:
+  - name: A
+    url: https://a.example/feed
+    prefer_feed_content: true
+  - name: B
+    url: https://b.example/feed
+""")
+    sources = load_sources(f)
+    assert sources[0].prefer_feed_content is True
+    assert sources[1].prefer_feed_content is False
