@@ -4,7 +4,7 @@ from theeye.config import Source
 from theeye.crawler.crawl import (
     ensure_source, article_exists, extract_text, crawl_rss,
     match_source_by_hostname, get_manual_source, crawl_url,
-    fetch_page, refetch_missing,
+    fetch_page, refetch_missing, feed_entry_text,
     MANUAL_SOURCE_NAME,
 )
 
@@ -444,3 +444,48 @@ def test_refetch_missing_respects_limit(db):
         refetch_missing(db, limit=2)
 
     assert client.get.call_count == 2
+
+
+# --- feed content fallback ---
+
+RSS_WITH_CONTENT = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>Test Feed</title>
+  <item>
+    <title>Embedded Post</title>
+    <link>https://example.com/embedded</link>
+    <description>&lt;p&gt;Full text from the feed itself.&lt;/p&gt;</description>
+  </item>
+</channel>
+</rss>"""
+
+
+def test_feed_entry_text_from_summary():
+    import feedparser
+    feed = feedparser.parse(RSS_WITH_CONTENT)
+    assert feed_entry_text(feed.entries[0]) == "Full text from the feed itself."
+
+
+def test_feed_entry_text_missing():
+    import feedparser
+    feed = feedparser.parse(SAMPLE_RSS)
+    assert feed_entry_text(feed.entries[0]) is None
+
+
+def test_crawl_rss_falls_back_to_feed_content(db):
+    src = Source(name="Test", url="https://example.com/feed", type="rss")
+    sid = ensure_source(db, src)
+    client = MagicMock()
+    import feedparser
+    parsed = feedparser.parse(RSS_WITH_CONTENT)
+    with patch("theeye.crawler.crawl.feedparser.parse", return_value=parsed), \
+         patch("theeye.crawler.crawl.fetch_page", return_value=None):
+        count = crawl_rss(db, client, src, sid)
+    assert count == 1
+    row = db.execute(
+        "SELECT content_text FROM articles WHERE url = ?",
+        ("https://example.com/embedded",),
+    ).fetchone()
+    assert row["content_text"] == "Full text from the feed itself."

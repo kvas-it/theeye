@@ -74,6 +74,29 @@ def extract_text(
     return title, text
 
 
+def feed_entry_text(entry) -> str | None:
+    """Extract plain text from content supplied in the feed entry itself.
+
+    Some sites (e.g. LessWrong) block direct page fetches with bot
+    protection but publish full article HTML in their feed.
+    """
+    from lxml.html import fromstring
+
+    html = None
+    content = entry.get("content")
+    if content:
+        html = content[0].get("value")
+    if not html:
+        html = entry.get("summary")
+    if not html:
+        return None
+    try:
+        text = fromstring(html).text_content().strip()
+    except Exception:
+        return None
+    return text or None
+
+
 def _throttle(host: str) -> None:
     """Sleep so consecutive requests to the same host stay polite."""
     last = _last_request_time.get(host)
@@ -148,6 +171,10 @@ def crawl_rss(
             extracted_title, content_text = extract_text(html, url)
             if not title:
                 title = extracted_title
+        if not content_text:
+            # Page fetch blocked or extraction failed; fall back to
+            # content embedded in the feed.
+            content_text = feed_entry_text(entry)
 
         db.execute(
             """INSERT INTO articles
